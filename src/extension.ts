@@ -1,28 +1,84 @@
-// The module 'vscode' contains the VS Code extensibility API
-// Import the module and reference it with the alias vscode in your code below
+/*---------------------------------------------------------
+ * Copyright (C) Microsoft Corporation. All rights reserved.
+ *--------------------------------------------------------*/
+
 import * as vscode from "vscode";
+import { exec } from "child_process";
+let myStatusBarItem: vscode.StatusBarItem;
 
-// this method is called when your extension is activated
-// your extension is activated the very first time the command is executed
-export function activate(context: vscode.ExtensionContext) {
-  // Use the console to output diagnostic information (console.log) and errors (console.error)
-  // This line of code will only be executed once when your extension is activated
-  console.log('Congratulations, your extension "nvm-windows" is now active!');
-
-  // The command has been defined in the package.json file
-  // Now provide the implementation of the command with registerCommand
-  // The commandId parameter must match the command field in package.json
-  let disposable = vscode.commands.registerCommand(
-    "nvm-windows.checkNodeVersion",
-    () => {
-      // The code you place here will be executed every time your command is executed
-      // Display a message box to the user
-      vscode.window.showInformationMessage("Hello World from nvm-windows!");
-    }
+export function activate({ subscriptions }: vscode.ExtensionContext) {
+  // register a command that is invoked when the status bar
+  // item is selected
+  const myCommandId = "nvm-windows.nvmList";
+  subscriptions.push(
+    vscode.commands.registerCommand(myCommandId, async () => {
+      const nodeVersionList = await getNodeVersionList();
+      if (nodeVersionList && nodeVersionList.length) {
+        vscode.window.showQuickPick(nodeVersionList);
+      }
+    })
   );
 
-  context.subscriptions.push(disposable);
+  // create a new status bar item that we can now manage
+  myStatusBarItem = vscode.window.createStatusBarItem(
+    vscode.StatusBarAlignment.Right,
+    10000
+  );
+
+  myStatusBarItem.command = myCommandId;
+  subscriptions.push(myStatusBarItem);
+  getCurrentNodeVersion().then((v) => {
+    console.log(v);
+
+    myStatusBarItem.tooltip = `now nodeVersion is ${v}`;
+    myStatusBarItem.text = `v${v}`;
+    myStatusBarItem.show();
+  });
+  // register some listener that make sure the status bar
+  // item always up-to-date
+  // subscriptions.push(
+  //   vscode.window.onDidChangeTextEditorSelection(updateStatusBarItem)
+  // );
+
+  // // update status bar item once at start
+  // updateStatusBarItem();
+}
+async function getNodeVersionList() {
+  return new Promise<string[]>((resolve, reject) =>
+    exec("nvm list", (err, stdout, stderr) => {
+      if (err) {
+      }
+
+      if (stdout) {
+        // resolve(stdout.match(/\d+(?:\.\d+){2}/g) as string[]);
+        resolve(
+          stdout
+            .trim()
+            .split("\n")
+            .map((v) => v.trim()) as string[]
+        );
+      }
+    })
+  );
 }
 
-// this method is called when your extension is deactivated
-export function deactivate() {}
+async function getCurrentNodeVersion() {
+  return new Promise<string | undefined>((resolve, reject) =>
+    exec("nvm list", (err, stdout, stderr) => {
+      if (err) {
+      }
+
+      if (stdout) {
+        // resolve(stdout.match(/\d+(?:\.\d+){2}/g) as string[]);
+        const current = stdout
+          .trim()
+          .split("\n")
+          .map((v) => v.trim())
+          .find((v) => v.startsWith("*"));
+        if (current) {
+          resolve(current.match(/\d+(?:\.\d+){2}/g)?.[0]);
+        }
+      }
+    })
+  );
+}
