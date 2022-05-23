@@ -4,8 +4,9 @@
 
 import * as vscode from "vscode";
 import { exec } from "child_process";
+import { promises as fs } from "fs";
 let myStatusBarItem: vscode.StatusBarItem;
-
+let myQuickInput: vscode.QuickPick<vscode.QuickPickItem>;
 export function activate({ subscriptions }: vscode.ExtensionContext) {
   // register a command that is invoked when the status bar
   // item is selected
@@ -13,8 +14,46 @@ export function activate({ subscriptions }: vscode.ExtensionContext) {
   subscriptions.push(
     vscode.commands.registerCommand(myCommandId, async () => {
       const nodeVersionList = await getNodeVersionList();
-      if (nodeVersionList && nodeVersionList.length) {
-        vscode.window.showQuickPick(nodeVersionList);
+      const currentNodeVersion = await getCurrentNodeVersion();
+      const projectNodeVersion = await getNvmrcVersion();
+      if (
+        currentNodeVersion &&
+        projectNodeVersion &&
+        nodeVersionList &&
+        nodeVersionList.length
+      ) {
+        myQuickInput = vscode.window.createQuickPick();
+        const items = nodeVersionList.map((v) => {
+          if (
+            currentNodeVersion === projectNodeVersion &&
+            v === projectNodeVersion
+          ) {
+            return {
+              label: v,
+              description: "matched",
+            };
+          }
+          if (v === projectNodeVersion) {
+            return {
+              label: v,
+              description: "expect project node version",
+            };
+          }
+          if (v === currentNodeVersion) {
+            return {
+              label: v,
+              description: "current node version",
+            };
+          }
+          return {
+            label: v,
+          };
+        });
+        myQuickInput.items = items;
+        myQuickInput.show();
+        myQuickInput.onDidChangeSelection((v) => {
+          checkNodeVersion(v[0].label);
+        });
       }
     })
   );
@@ -24,25 +63,15 @@ export function activate({ subscriptions }: vscode.ExtensionContext) {
     vscode.StatusBarAlignment.Right,
     10000
   );
-
   myStatusBarItem.command = myCommandId;
   subscriptions.push(myStatusBarItem);
   getCurrentNodeVersion().then((v) => {
-    console.log(v);
-
     myStatusBarItem.tooltip = `now nodeVersion is ${v}`;
     myStatusBarItem.text = `v${v}`;
     myStatusBarItem.show();
   });
-  // register some listener that make sure the status bar
-  // item always up-to-date
-  // subscriptions.push(
-  //   vscode.window.onDidChangeTextEditorSelection(updateStatusBarItem)
-  // );
-
-  // // update status bar item once at start
-  // updateStatusBarItem();
 }
+
 async function getNodeVersionList() {
   return new Promise<string[]>((resolve, reject) =>
     exec("nvm list", (err, stdout, stderr) => {
@@ -55,7 +84,8 @@ async function getNodeVersionList() {
           stdout
             .trim()
             .split("\n")
-            .map((v) => v.trim()) as string[]
+            .map((v) => v.trim())
+            .map((v) => v.match(/\d+(?:\.\d+){2}/g)?.[0]) as string[]
         );
       }
     })
@@ -78,6 +108,36 @@ async function getCurrentNodeVersion() {
         if (current) {
           resolve(current.match(/\d+(?:\.\d+){2}/g)?.[0]);
         }
+      }
+    })
+  );
+}
+
+async function getNvmrcVersion() {
+  const folders = vscode.workspace.workspaceFolders;
+  if (folders && folders.length === 1) {
+    try {
+      const result = await fs.readFile(
+        folders[0].uri.fsPath + "/.nvmrc",
+        "utf8"
+      );
+      return result;
+    } catch {
+      throw Error("dont have .nvmrc file in your rootpath");
+    }
+  }
+}
+
+async function checkNodeVersion(version: string) {
+  return new Promise<string | undefined>((resolve, reject) =>
+    exec(`nvm use ${version}`, (err, stdout, stderr) => {
+      if (err) {
+        vscode.window.showErrorMessage(err.message);
+      }
+
+      if (stdout) {
+        vscode.window.showInformationMessage(stdout);
+        myQuickInput.hide();
       }
     })
   );
