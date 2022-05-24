@@ -16,8 +16,12 @@
   "contributes": {
     "commands": [
       {
-        "command": "nvm-windows.nvmList",
+        "command": "nvm-version.nvmList",
         "title": "nvm list"
+      },
+      {
+        "command": "nvm-version.autoCheck",
+        "title": "nvm auto check"
       }
     ]
   },

@@ -10,9 +10,10 @@ let myQuickInput: vscode.QuickPick<vscode.QuickPickItem>;
 export function activate({ subscriptions }: vscode.ExtensionContext) {
   // register a command that is invoked when the status bar
   // item is selected
-  const myCommandId = "nvm-windows.nvmList";
+  const nvmList = "nvm-version.nvmList";
+  const nvmAutoCheck = "nvm-version.autoCheck";
   subscriptions.push(
-    vscode.commands.registerCommand(myCommandId, async () => {
+    vscode.commands.registerCommand(nvmList, async () => {
       const nodeVersionList = await getNodeVersionList();
       const currentNodeVersion = await getCurrentNodeVersion();
       const projectNodeVersion = await getNvmrcVersion();
@@ -57,17 +58,29 @@ export function activate({ subscriptions }: vscode.ExtensionContext) {
       }
     })
   );
-
-  // create a new status bar item that we can now manage
-  myStatusBarItem = vscode.window.createStatusBarItem(
-    vscode.StatusBarAlignment.Right,
-    10000
+  subscriptions.push(
+    vscode.commands.registerCommand(nvmAutoCheck, async () => {
+      const projectNodeVersion = await getNvmrcVersion();
+      const currentNodeVersion = await getCurrentNodeVersion();
+      if (
+        currentNodeVersion &&
+        projectNodeVersion &&
+        projectNodeVersion !== currentNodeVersion
+      ) {
+        checkNodeVersion(projectNodeVersion);
+      }
+    })
   );
-  myStatusBarItem.command = myCommandId;
-  subscriptions.push(myStatusBarItem);
+  // create a new status bar item that we can now manage
   getCurrentNodeVersion().then((v) => {
+    myStatusBarItem = vscode.window.createStatusBarItem(
+      vscode.StatusBarAlignment.Right,
+      10000
+    );
+    myStatusBarItem.command = nvmList;
+    subscriptions.push(myStatusBarItem);
     myStatusBarItem.tooltip = `now nodeVersion is ${v}`;
-    myStatusBarItem.text = `v${v}`;
+    myStatusBarItem.text = `$(rocket) v${v}`;
     myStatusBarItem.show();
   });
 }
@@ -76,6 +89,7 @@ async function getNodeVersionList() {
   return new Promise<string[]>((resolve, reject) =>
     exec("nvm list", (err, stdout, stderr) => {
       if (err) {
+        throw new Error("nvm error, please checkout your nvm settings!");
       }
 
       if (stdout) {
@@ -96,6 +110,7 @@ async function getCurrentNodeVersion() {
   return new Promise<string | undefined>((resolve, reject) =>
     exec("nvm list", (err, stdout, stderr) => {
       if (err) {
+        throw new Error("nvm error, please checkout your nvm settings!");
       }
 
       if (stdout) {
